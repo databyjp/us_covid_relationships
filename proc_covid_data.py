@@ -45,30 +45,32 @@ for k, v in {'New York City': 0, 'Kansas City': 1}.items():
 # covid_df = covid_df[covid_df['county'].isin(['Cook', 'New York City', 'Los Angeles'])]
 
 # Create new columns for processing
-covid_df = covid_df.assign(delta=0)
-covid_df = covid_df.assign(delta_3day_ra=0)
-covid_df = covid_df.assign(r=0)
-covid_df = covid_df.assign(r_3day_ra=0)
-covid_df = covid_df.assign(cases_3day_ra=0)
+covid_df = covid_df.assign(cases_3day_ra=0)  # 3 day rolling average of no. of cases
+covid_df = covid_df.assign(delta_3day_ra=0)  # Rolling average of 3 day rolling avg case numbers
+covid_df = covid_df.assign(delta_3day_roc=0)  # Rate of change of change to 3day rolling average
+covid_df = covid_df.assign(days_inc_deltas=0)  # Days of increasing rate of change (i.e. when delta_3day_roc > 1)
+covid_df = covid_df.assign(cons_days_inc_deltas=0)  # Consecutive days of increasing rate of change (i.e. when delta_3day_roc > 1)
 covid_df = covid_df.assign(datetime=pd.to_datetime(covid_df.date))
 
 for i, row in covid_df.iterrows():
     today = datetime.fromisoformat(row['date'])
     today_minus1 = datetime.fromisoformat(row['date']) - timedelta(days=1)
     today_minus3 = datetime.fromisoformat(row['date']) - timedelta(days=3)
-    prev_1day_row = covid_df[(covid_df['datetime'] == today_minus1) & (covid_df['fips'] == row['fips'])]
-    prev_3days_rows = covid_df[(covid_df['datetime'] <= today) & (covid_df['datetime'] > today_minus3) & (covid_df['fips'] == row['fips'])]
-    if len(prev_1day_row) > 0:
-        prev_row = prev_1day_row.iloc[0]
-        covid_df.loc[i, 'delta'] = row['cases'] - prev_row['cases']
-        covid_df.loc[i, 'delta_3day_ra'] = row['cases_3day_ra'] - prev_row['cases_3day_ra']
-        if len(prev_3days_rows) > 0:
-            covid_df.loc[i, 'cases_3day_ra'] = prev_3days_rows['cases'].sum()/3
-        if prev_row['delta'] > 0:
-            covid_df.loc[i, 'r'] = row['delta'] / prev_row['delta']
-            covid_df.loc[i, 'r_3day_ra'] = row['delta_3day_ra'] / prev_row['delta_3day_ra']
-    else:
-        covid_df.loc[i, 'delta'] = 0
+    rolling_3days_rows = covid_df[(covid_df['datetime'] <= today) & (covid_df['datetime'] > today_minus3) & (covid_df['fips'] == row['fips'])]
+    covid_df.loc[i, 'cases_3day_ra'] = rolling_3days_rows['cases'].sum() / 3
+
+    yday_rows = covid_df[(covid_df['datetime'] == today_minus1) & (covid_df['fips'] == row['fips'])]
+    if len(yday_rows) > 0:
+        yday_row = yday_rows.iloc[0]
+        covid_df.loc[i, 'delta_3day_ra'] = covid_df.loc[i, 'cases_3day_ra'] - yday_row['cases_3day_ra']
+
+        if yday_row['delta_3day_ra'] > 0:
+            covid_df.loc[i, 'delta_3day_roc'] = covid_df.loc[i, 'delta_3day_ra'] / yday_row['delta_3day_ra']
+
+    days_inc_deltas = covid_df[(covid_df['datetime'] <= today) & (covid_df['delta_3day_roc'] > 1) & (covid_df['fips'] == row['fips'])]
+    covid_df.loc[i, 'days_inc_deltas'] = len(days_inc_deltas)
+
+
     if (i+1) % 5000 == 0:
         logger.info(f'Processed {i+1} files')
 
