@@ -72,12 +72,15 @@ for (data_col, tmp_df) in [
 ]:
     cur_covid_df.loc[:, data_col] = 0
     for i, row in cur_covid_df.iterrows():
-        cur_fips = row['fips']
-        tmp_vals = tmp_df[tmp_df.fips == cur_fips][data_col].values
-
         if row['county'] != 'New York City':
+            cur_fips = row['fips']
+            tmp_vals = tmp_df[tmp_df.fips == cur_fips][data_col].values
             cur_covid_df.loc[i, data_col] = tmp_vals[0]
         else:
-            cur_covid_df.loc[i, data_col] = sum(tmp_vals)
+            tmp_vals = tmp_df[tmp_df.fips.isin(nyc_fips)][data_col].values
+            if data_col == 'POP_ESTIMATE_2018':
+                cur_covid_df.loc[i, data_col] = sum(tmp_vals)
+            else:
+                cur_covid_df.loc[i, data_col] = np.mean(tmp_vals)
 
 cur_covid_df.to_csv('output/merged_covid_df.csv')
